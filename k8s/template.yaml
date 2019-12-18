@@ -1,0 +1,220 @@
+apiVersion: template.openshift.io/v1
+kind: Template
+labels:
+  template: spring-boot-reference-application
+message: |-
+  The following service(s) have been created in your project: ${APPLICATION_NAME}.
+metadata:
+  annotations:
+    description: Spring Boot Reference Application Template
+    iconClass: fa fa-plane
+    openshift.io/display-name: Spring Boot Reference Application
+    openshift.io/long-description: An Example Template for deploying a simple demo.
+      This includes creating a DeploymentConfig, ConfigMap, ImageStream, Service, and Route.
+    openshift.io/provider-display-name: "Accenture"
+    tags: spring-boot,reference-application,demo
+  name: spring-boot-reference-application
+objects:
+# ConfigMap
+- apiVersion: v1
+  kind: ConfigMap
+  metadata:
+    name: ${APPLICATION_NAME}
+    labels:
+      app: ${APPLICATION_NAME}
+  data:
+    application.properties: |-
+      server.port=${PORT}
+      bean.message=Hello from OpenShift!
+# Image Stream
+- apiVersion: image.openshift.io/v1
+  kind: ImageStream
+  metadata:
+    labels:
+      app: ${APPLICATION_NAME}
+    name: ${APPLICATION_NAME}
+  spec:
+    lookupPolicy:
+      local: false
+    tags:
+    - name: ${TAG}
+      annotations:
+        openshift.io/imported-from: "${REGISTRY}/${PROJECT}/${IMAGE}:${TAG}"
+      from:
+        kind: DockerImage
+        name: "${REGISTRY}/${PROJECT}/${IMAGE}:${TAG}"
+      importPolicy:
+        scheduled: true
+      referencePolicy:
+        type: Source
+# Deployment Config
+- apiVersion: apps.openshift.io/v1
+  kind: DeploymentConfig
+  metadata:
+    name: ${APPLICATION_NAME}
+    labels:
+      app: ${APPLICATION_NAME}
+  spec:
+    replicas: "${{REPLICA_COUNT}}"
+    selector:
+      app: ${APPLICATION_NAME}
+      deploymentconfig: ${APPLICATION_NAME}
+    strategy:
+      type: Rolling
+      rollingParams:
+        updatePeriodSeconds: 1
+        intervalSeconds: 1
+        timeoutSeconds: 600
+        maxSurge: 25%
+        maxUnavailable: 25%
+    template:
+      metadata:
+        labels:
+          app: ${APPLICATION_NAME}
+          deploymentconfig: ${APPLICATION_NAME}
+      spec:
+        volumes:
+        - name: config-volume
+          configMap:
+            name: ${APPLICATION_NAME}
+          items:
+          - key: application.properties
+            path: application.properties
+        containers:
+        - name: ${APPLICATION_NAME}
+          image: "${REGISTRY}/${PROJECT}/${IMAGE}:${TAG}"
+          imagePullPolicy: "Always"
+          env:
+          - name: SPRING_CONFIG_LOCATION
+            value: "/etc/config/application.properties"
+          volumeMounts:
+          - name: config-volume
+            mountPath: /etc/config
+          ports:
+          - containerPort: ${{PORT}}
+            protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: ${{PORT}}
+            initialDelaySeconds: 3
+            periodSeconds: 2
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /liveness
+              port: ${{PORT}}
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 3    
+          resources:
+            limits:
+              cpu: "${{CPU_LIMIT}}"
+              memory: "${{MEMORY_LIMIT}}"
+            requests:
+              cpu: "${{CPU_REQUEST}}"
+              memory: "${{MEMORY_REQUEST}}"
+    triggers:
+    - type: ConfigChange
+    - type: ImageChange
+      imageChangeParams:
+        automatic: true
+        from:
+          kind: ImageStreamTag
+          name: "${APPLICATION_NAME}:${TAG}"
+          namespace: ${NAMESPACE}
+        containerNames:
+        - ${APPLICATION_NAME}
+# Service
+- apiVersion: v1
+  kind: Service
+  metadata:
+    name: ${APPLICATION_NAME}
+    labels:
+      app: ${APPLICATION_NAME}
+  spec:
+    type: ClusterIP
+    ports:
+    - name: "${PORT}-tcp"
+      port: ${{PORT}}
+      protocol: TCP
+      targetPort: ${{PORT}}
+    selector:
+      app: ${APPLICATION_NAME}
+      deploymentconfig: ${APPLICATION_NAME}
+# Route definition
+- apiVersion: route.openshift.io/v1
+  kind: Route
+  metadata:
+    labels:
+      app: ${APPLICATION_NAME}
+    name: ${APPLICATION_NAME}
+  spec:
+    port:
+      targetPort: "${PORT}-tcp"
+    to:
+      kind: Service
+      name: ${APPLICATION_NAME}
+      weight: 100
+parameters:
+  - name: "NAMESPACE"
+    valueFrom:
+      fieldRef:
+          apiVersion: v1
+          fieldPath: metadata.namespace
+    required: true
+  - name: "APPLICATION_NAME"
+    displayName: "Application Name"
+    description: "Name of the application"
+    required: true
+    value: "ref-app"
+  - name: "PORT"
+    displayName: "Application Port"
+    description: "Application Port Number"
+    required: true
+    value: "8080"
+  - name: "REPLICA_COUNT"
+    displayName: "Replicas"
+    description: "Number of pod replicas"
+    required: true
+    value: "1"
+  - name: "CPU_REQUEST"
+    displayName: "CPU Request"
+    description: "Amount of CPU Request"
+    required: true
+    value: "200m"
+  - name: "CPU_LIMIT"
+    displayName: "CPU LIMIT"
+    description: "Amount of CPU Limit"
+    required: true
+    value: "4000m"
+  - name: "MEMORY_REQUEST"
+    displayName: "Memory Request"
+    description: "Amount of Memory Request"
+    required: true
+    value: "120Mi"
+  - name: "MEMORY_LIMIT"
+    displayName: "Memory LIMIT"
+    description: "Amount of Memory Limit"
+    required: true
+    value: "200Mi"
+  - name: "REGISTRY"
+    displayName: "Docker Registry"
+    description: "DNS Name of the Docker Registry to pull from (registry/project/image:tag)"
+    required: true
+    value: ""
+  - name: "PROJECT"
+    displayName: "Docker Project/Org"
+    description: "Docker Project/Organization name (registry/project/image:tag)"
+    required: true
+    value: ""
+  - name: "IMAGE"
+    displayName: "Docker Image"
+    description: "Docker Image to use (registry/project/image:tag)"
+    required: true
+    value: "spring-boot-reference-application"
+  - name: "TAG"
+    displayName: "Docker Image Tag"
+    description: "Docker Image Tag to use (registry/project/image:tag)"
+    required: true
+    value: "latest"

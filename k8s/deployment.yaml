@@ -1,100 +1,102 @@
----
-# ConfigMap
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: refapp
-data:
-  application.properties: |-
-    server.port=8080
-    bean.message=Hello from OpenShift!
----
-# Deployment
-apiVersion: extensions/v1beta1
-kind: Deployment
-metadata:
-  name: refapp
-  labels:    
-    app: "refapp"
-spec:
-  replicas: 1
-  strategy:
-    rollingUpdate:
-      maxSurge: 1
-      maxUnavailable: 0
-    type: RollingUpdate
-  template:
+  ---
+  # ConfigMap
+  apiVersion: v1
+  kind: ConfigMap
+  metadata:
+    name: refapp
+    labels:    
+      app: "refapp"
+  data:
+    application.properties: |-
+      server.port=8080
+      bean.message=Hello from OpenShift!
+  ---
+  # Deployment
+  apiVersion: extensions/v1beta1
+  kind: Deployment
+  metadata:
+    name: refapp
+    labels:    
+      app: "refapp"
+  spec:
+    replicas: 1
+    strategy:
+      rollingUpdate:
+        maxSurge: 1
+        maxUnavailable: 0
+      type: RollingUpdate
+    template:
+      metadata:
+        labels:
+          app: "refapp"
+      spec:
+        volumes:
+        - name: config-volume
+          configMap:
+            name: refapp
+          items:
+          - key: application.properties
+            path: application.properties
+        containers:
+        - name: "refapp"
+          image: "fabiogomezdiaz/refapp:latest"
+          imagePullPolicy: "Always"
+          env:
+          - name: SPRING_CONFIG_LOCATION
+            value: "/etc/config/application.properties"
+          volumeMounts:
+          - name: config-volume
+            mountPath: /etc/config
+          ports:
+          - containerPort: 8080
+            protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            initialDelaySeconds: 3
+            periodSeconds: 2
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /liveness
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 3
+          resources:
+            limits:
+              memory: 200Mi
+              cpu: "400m"
+            requests:
+              memory: 120Mi
+              cpu: "200m"
+  ---
+  # Service
+  apiVersion: v1
+  kind: Service
+  metadata:
+    name: "refapp"
+    labels:
+      app: "refapp"
+  spec:
+    type: ClusterIP
+    ports:
+    - name: http
+      protocol: TCP
+      port: 8080
+      targetPort: 8080
+    selector:
+      app: "refapp"
+  ---
+    # Route
+    apiVersion: route.openshift.io/v1
+    kind: Route
     metadata:
+      name: "refapp"
       labels:
         app: "refapp"
     spec:
-      volumes:
-      - name: config-volume
-        configMap:
-          name: refapp
-        items:
-        - key: application.properties
-          path: application.properties
-      containers:
-      - name: "refapp"
-        image: "fabiogomezdiaz/refapp:latest"
-        imagePullPolicy: "Always"
-        env:
-        - name: SPRING_CONFIG_LOCATION
-          value: "/etc/config/application.properties"
-        volumeMounts:
-        - name: config-volume
-          mountPath: /etc/config
-        ports:
-        - containerPort: 8080
-          protocol: TCP
-        readinessProbe:
-          httpGet:
-            path: /actuator/health
-            port: 8080
-          initialDelaySeconds: 3
-          periodSeconds: 2
-          failureThreshold: 3
-        livenessProbe:
-          httpGet:
-            path: /liveness
-            port: 8080
-          initialDelaySeconds: 5
-          periodSeconds: 5
-          failureThreshold: 3
-        resources:
-          limits:
-            memory: 200Mi
-            cpu: "400m"
-          requests:
-            memory: 120Mi
-            cpu: "200m"
----
-# Route
-apiVersion: route.openshift.io/v1
-kind: Route
-metadata:
-  name: "refapp"
-  labels:
-    app: "refapp"
-spec:
-  to:
-    kind: Service
-    name: "refapp"
----
-# Service
-apiVersion: v1
-kind: Service
-metadata:
-  name: "refapp"
-  labels:
-    app: "refapp"
-spec:
-  type: ClusterIP
-  ports:
-  - name: http
-    protocol: TCP
-    port: 8080
-    targetPort: 8080
-  selector:
-    app: "refapp"
+      to:
+        kind: Service
+        name: "refapp"
