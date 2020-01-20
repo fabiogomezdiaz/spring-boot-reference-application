@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: refapp
+  labels:    
+    app: "refapp"
+data:
+  application.properties: |-
+    server.port=8080
+    bean.message=Hello from OpenShift!
