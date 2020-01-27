@@ -7,7 +7,7 @@ WORKDIR $BUILD_DIR
 COPY --chown=gradle:gradle . ${BUILD_DIR}
 
 # Build Jar
-RUN gradle build
+RUN gradle clean build
 
 # STAGE: Deploy
 FROM openjdk:8-jre
