@@ -25,7 +25,7 @@ spec:
           path: application.properties
       containers:
       - name: "refapp"
-        image: "sdcpclharbma001.swacorp.com/swa-rais/spring-boot-reference-application:latest"
+        image: "fabiogomezdiaz/spring-boot-reference-application:latest"
         imagePullPolicy: "Always"
         env:
         - name: SPRING_CONFIG_LOCATION
